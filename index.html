@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10243a"><meta name="description" content="Registro y gestión de informes técnicos de averías">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css">
+<title>INFORMES MAX | Averías</title>
+</head>
+<body>
+<div id="loginView" class="login-wrap">
+  <form id="loginForm" class="login-card">
+    <div class="brand-mark">IM</div><p class="eyebrow">GESTIÓN TÉCNICA</p><h1>INFORMES MAX</h1><p class="muted">Ingresa con tu cuenta de técnico o supervisor.</p>
+    <label>Usuario<input id="loginUser" autocomplete="username" required placeholder="Tu usuario"></label>
+    <label>Contraseña<input id="loginPass" type="password" autocomplete="current-password" required placeholder="Tu contraseña"></label>
+    <button class="primary" type="submit">Ingresar</button><p id="loginError" class="error" role="alert"></p>
+  </form>
+</div>
+<div id="appView" class="hidden">
+<header class="topbar"><div class="brand"><span class="brand-mark small">IM</span><div><strong>INFORMES MAX</strong><small>Registro de averías</small></div></div><div class="user-area"><span id="userLabel"></span><button id="logoutBtn" class="ghost">Salir</button></div></header>
+<main class="container">
+  <nav class="tabs"><button class="tab active" data-tab="new">Nuevo informe</button><button class="tab" data-tab="list">Mis informes</button><button id="adminTab" class="tab hidden" data-tab="admin">Usuarios</button></nav>
+  <section id="newPanel" class="panel">
+    <div class="section-head"><div><p class="eyebrow">FORMULARIO TÉCNICO</p><h2>Reporte de avería</h2><p class="muted">Completa los datos y adjunta hasta 8 evidencias.</p></div><span class="status-pill">Borrador nuevo</span></div>
+    <form id="reportForm">
+      <div class="form-grid">
+        <label>N.º de ticket / incidencia<input name="ticket" required></label>
+        <label>Cliente / empresa<input name="client"></label>
+        <label>Servicio / enlace<input name="service"></label>
+        <label>Fecha de inicio<input name="started_at" type="datetime-local"></label>
+        <label>Fecha de solución<input name="resolved_at" type="datetime-local"></label>
+        <label>Reportado por<input name="reported_by"></label>
+        <label>Atendido / solucionado por<input name="resolved_by"></label>
+        <label>Causa de la avería<input name="cause"></label>
+        <label class="span-2">Descripción de la avería<textarea name="description" rows="3"></textarea></label>
+        <label class="span-2">Trabajo realizado / solución<textarea name="solution" rows="3"></textarea></label>
+        <label>Personal que atendió<textarea name="personnel" rows="2"></textarea></label>
+        <label>Materiales utilizados<textarea name="materials" rows="2"></textarea></label>
+        <label>Tiempo de reparación<input name="repair_time" placeholder="Ej. 2 h 30 min"></label>
+        <label class="span-2">Observaciones / nota final<textarea name="notes" rows="3"></textarea></label>
+      </div>
+      <div class="evidence-head"><div><h3>Evidencias fotográficas</h3><p class="muted">Máximo 8 fotos. Cada imagen tendrá su propia descripción.</p></div><span id="photoCount">0 / 8</span></div>
+      <div id="photoGrid" class="photo-grid"></div>
+      <div class="form-actions"><button type="button" id="resetBtn" class="secondary">Limpiar</button><button type="submit" class="primary" id="saveBtn">Guardar informe</button></div>
+      <p id="formMessage" class="muted" aria-live="polite"></p>
+    </form>
+  </section>
+  <section id="listPanel" class="panel hidden"><div class="section-head"><div><p class="eyebrow">HISTORIAL</p><h2>Informes registrados</h2><p class="muted">Consulta y exporta tus reportes.</p></div><button id="refreshBtn" class="secondary">Actualizar</button></div><div id="reportsList" class="reports-list"></div></section>
+  <section id="adminPanel" class="panel hidden"><div class="section-head"><div><p class="eyebrow">ADMINISTRACIÓN</p><h2>Crear usuario</h2><p class="muted">Las cuentas se crean en el proyecto Supabase independiente.</p></div></div><form id="userForm" class="form-grid"><label>Nombre completo<input name="full_name" required></label><label>Usuario<input name="username" required></label><label>Contraseña temporal<input name="password" type="password" minlength="8" required></label><label>Perfil<select name="role"><option value="technician">Técnico</option><option value="supervisor">Supervisor</option></select></label><div class="span-2"><button class="primary" type="submit">Crear usuario</button><p id="userMessage" class="muted"></p></div></form></section>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="./config.js"></script><script src="./app.js"></script>
+</body></html>
