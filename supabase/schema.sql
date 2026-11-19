@@ -30,7 +30,7 @@ alter table public.reports drop constraint if exists reports_status_check;
 alter table public.reports add constraint reports_status_check check(status in ('assigned','in_progress','pending_review','closed'));
 update public.reports set created_by=user_id where created_by is null;
 update public.reports set assigned_to=user_id where assigned_to is null;
-update public.reports set supervisor_started_at=case when started_at is not null and started_at ~ '^\\d{4}-\\d{2}-\\d{2}' then started_at::timestamptz else null end where supervisor_started_at is null;
+update public.reports set supervisor_started_at=case when started_at is not null and started_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' then started_at::timestamptz else null end where supervisor_started_at is null;
 update public.reports set status='closed' where resolved_at is not null and status='assigned';
 alter table public.reports alter column created_by set default auth.uid();
 create index if not exists reports_assigned_to_idx on public.reports(assigned_to);
