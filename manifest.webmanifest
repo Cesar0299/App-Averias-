@@ -1,1 +1,17 @@
-{"name":"INFORMES MAX","short_name":"Informes MAX","description":"Gestión de tickets e informes técnicos","start_url":"./","display":"standalone","background_color":"#f2f5f8","theme_color":"#10243a","icons":[]}
+{
+  "name": "INFORMES MAX",
+  "short_name": "Informes MAX",
+  "description": "Gestión de tickets e informes técnicos",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f2f5f8",
+  "theme_color": "#10243a",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
