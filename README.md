@@ -1,32 +1,38 @@
 # INFORMES MAX
+Aplicación PWA para asignación, atención, revisión y cierre de tickets de mantenimiento.
 
-Aplicación PWA independiente para registrar informes técnicos de averías. No utiliza la base de datos ni las cuentas de MOVILMAX.
+## Flujo operativo
+1. El supervisor crea el ticket, registra el inicio, completa los datos iniciales y asigna un técnico.
+2. El técnico ve únicamente los tickets que tiene asignados. Los datos originales son de solo lectura.
+3. El técnico agrega fotos, descripciones, trabajo realizado, personal, materiales, tiempo efectivo y observaciones. Envía el ticket a revisión.
+4. El supervisor revisa y corrige la información, registra la fecha/hora final y cierra el ticket.
+5. Al cerrar, la aplicación genera el PDF final y lo guarda de forma privada en Supabase Storage. El PDF queda asociado al ticket para futuras consultas.
 
-## Funciones incluidas
-- Acceso con usuario y contraseña (cuentas independientes).
-- Perfiles técnico y supervisor con políticas RLS.
-- Registro de ticket, cliente, servicio, fechas, causa, descripción, solución, personal, materiales y observaciones.
-- Hasta 8 evidencias fotográficas; cámara del móvil o galería; vista previa en dos columnas.
-- Almacenamiento privado de fotografías y enlaces firmados temporales.
-- Exportación a PDF mediante impresión del navegador y a Excel.
-- Diseño adaptable y PWA instalable.
+## Indicadores
+- Total de tickets, asignados/en atención, pendientes de revisión y cerrados.
+- Promedio de tiempo transcurrido entre inicio y cierre.
+- Promedio del tiempo efectivo declarado por los técnicos.
+- Comparación de tiempo transcurrido frente al tiempo declarado.
+- Tickets por técnico y filtros por fechas.
+- Buscador combinado por ticket, cliente, servicio, técnico, causa y descripción.
 
-## Configuración necesaria
-1. Crear un proyecto Supabase NUEVO para INFORMES MAX.
-2. En SQL Editor ejecutar `supabase/schema.sql`.
-3. Copiar `config.example.js` como `config.js` y completar URL y anon key del proyecto.
-4. Desplegar la función `admin-create-user`:
+## Datos y seguridad
+- Proyecto Supabase independiente de MOVILMAX.
+- PostgreSQL guarda datos y metadatos; fotografías y PDFs se almacenan en buckets privados.
+- RLS limita la lectura de tickets asignados al técnico y de todos los tickets al supervisor.
+- El técnico envía sus campos mediante la función SQL `submit_technician_work`; no puede cambiar los datos iniciales ni cerrar tickets.
+- Los PDFs finales solo pueden leerse/subirse por supervisores.
+- Nunca subir `service_role` ni contraseñas al repositorio.
+
+## Configuración de Supabase
+1. Crear un proyecto nuevo para INFORMES MAX en Supabase.
+2. En SQL Editor ejecutar el archivo `supabase/schema.sql`. Este script añade las columnas y políticas del nuevo flujo al esquema anterior.
+3. Crear el primer usuario en Authentication > Users y registrar su perfil supervisor con el INSERT comentado al final del SQL.
+4. Desplegar la función de administración:
    `supabase functions deploy admin-create-user`
-5. Configurar secretos de la función con los valores del proyecto:
-   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-   La service role key se guarda solo como secreto de Supabase; nunca en el frontend ni en GitHub.
-6. Crear el primer usuario en Authentication > Users, copiar su UUID y crear su perfil supervisor con el INSERT comentado al final de schema.sql.
+5. Configurar los secretos `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` para la Edge Function. La service role key debe permanecer solo en secretos de Supabase.
+6. Copiar `config.example.js` como `config.js` y colocar URL y anon key del proyecto.
 7. Publicar el repositorio con GitHub Pages (Settings > Pages > Deploy from branch > main > /(root)).
 
-## Nota sobre la plantilla Excel
-La estructura inicial del formulario recoge los campos del informe compartido. La reproducción exacta del diseño visual y de las posiciones de celdas/fotos de la plantilla debe verificarse contra el archivo original antes de darla por finalizada.
-
-## Seguridad
-- No subir contraseñas de usuarios ni claves service_role.
-- El proyecto Supabase debe ser distinto al de MOVILMAX.
-- El bucket de evidencias es privado y las imágenes se muestran mediante signed URLs.
+## Importante sobre el despliegue
+El código y el esquema SQL se guardan en GitHub. Crear el proyecto real de Supabase, ejecutar el SQL y poner las claves requiere acceso a la cuenta de Supabase del propietario; esos pasos no se pueden completar solo con el repositorio.
