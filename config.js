@@ -1,7 +1,6 @@
-// Configuración pública del proyecto Supabase INFORMES MAX.
-// Completa estos dos valores con los datos del proyecto nuevo.
-// La anon key es pública; NUNCA coloques aquí la service_role key.
+// Configuración pública de Supabase INFORMES MAX.
+// La clave publishable es pública; nunca colocar aquí service_role ni secret keys.
 window.INFORMES_CONFIG = {
-  SUPABASE_URL: "PEGA_AQUI_LA_URL_DEL_PROYECTO",
-  SUPABASE_ANON_KEY: "PEGA_AQUI_LA_ANON_KEY"
+  SUPABASE_URL: "https://zorygfdfpvbgqgcqbynm.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable__kaB9Tt_JVTxNq5m2Kyv8A_xRSn978_"
 };
