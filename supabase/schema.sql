@@ -100,3 +100,7 @@ create policy "pdf storage supervisor upload" on storage.objects for insert to a
 create policy "pdf storage supervisor update" on storage.objects for update to authenticated using(bucket_id='report-pdfs' and public.is_supervisor()) with check(bucket_id='report-pdfs' and public.is_supervisor());
 -- Primer supervisor: crear usuario en Authentication y luego insertar su perfil con su UUID.
 -- insert into public.profiles(id,full_name,username,role) values ('UUID_AUTH','Supervisor','supervisor','supervisor');
+
+-- Excel de materiales independiente del informe de avería.
+alter table public.reports add column if not exists materials_xlsx_storage_path text;
+alter table public.reports add column if not exists materials_xlsx_created_at timestamptz;
