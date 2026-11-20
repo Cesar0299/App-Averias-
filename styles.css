@@ -21,3 +21,5 @@
 
 /* Ajuste de proporciones y alineación para evidencias y pies de foto */
 .material-matrix td{white-space:nowrap}.material-matrix th{white-space:normal}
+
+.print-report figcaption{text-align:center;font-weight:700}
