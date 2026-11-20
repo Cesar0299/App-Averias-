@@ -14,3 +14,5 @@
 @media(max-width:850px){.material-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.material-add-wrap{grid-column:1/-1}.material-add-wrap button{width:100%}}
 @media(max-width:520px){.material-entry-grid{grid-template-columns:1fr}.material-add-wrap{grid-column:auto}.materials-editor{padding:12px}.material-table{min-width:620px}}
 .material-inline-edit{width:100%;min-width:72px;padding:7px 8px;border:1px solid var(--line,#cbd5e1);border-radius:7px;background:var(--surface,#fff);color:inherit;font:inherit;font-size:12px;box-sizing:border-box}.material-inline-edit:focus{outline:2px solid var(--accent,#2563eb);outline-offset:1px}
+
+.materials-history-metrics{margin:12px 0}.materialsPanel .subpanel{margin-top:14px}.materialsPanel .material-table{min-width:680px}
