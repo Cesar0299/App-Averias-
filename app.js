@@ -120,7 +120,7 @@ async function createAndStoreExcel(r){
    drawFrame(left,s.rows[0],right,s.rows[1]);
    drawFrame(ws.getCell(s.num).col,ws.getCell(s.num).row,ws.getCell(s.num).col,ws.getCell(s.num).row);
    const cap=ws.getCell(s.desc);
-   const match=String(s.descMerge||s.desc).match(/^([A-Z]+)(\\d+):([A-Z]+)(\\d+)$/);
+   const match=String(s.descMerge||s.desc).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
    if(match){const colNum=x=>[...x].reduce((n,ch)=>n*26+ch.charCodeAt(0)-64,0);drawFrame(colNum(match[1]),+match[2],colNum(match[3]),+match[4]);}
    else drawFrame(cap.col,cap.row,cap.col,cap.row);
  }
@@ -164,9 +164,7 @@ async function createAndStoreExcel(r){
    let boxW=0,boxH=0;for(let col=left;col<=right;col++)boxW+=colPx(col);for(let row=top;row<=bottom;row++)boxH+=rowPx(row);
    const scale=Math.min(1,boxW/photoW,boxH/photoH),drawW=photoW*scale,drawH=photoH*scale;
    const dx=(boxW-drawW)/2,dy=(boxH-drawH)/2;
-   let colOffset=dx;while(colOffset>=colPx(left)){colOffset-=colPx(left);}
-   let rowOffset=dy;while(rowOffset>=rowPx(top)){rowOffset-=rowPx(top);}
-   ws.addImage(imageId,{tl:{col:s.area.col+dx/colPx(left),row:s.area.row+dy/rowPx(top)},ext:{width:drawW,height:drawH},editAs:"oneCell"});
+   let anchorCol=s.area.col,remainingX=dx;while(remainingX>=colPx(Math.floor(anchorCol)+1)){remainingX-=colPx(Math.floor(anchorCol)+1);anchorCol=Math.floor(anchorCol)+1;}anchorCol+=remainingX/colPx(Math.floor(anchorCol)+1); let anchorRow=s.area.row,remainingY=dy;while(remainingY>=rowPx(Math.floor(anchorRow)+1)){remainingY-=rowPx(Math.floor(anchorRow)+1);anchorRow=Math.floor(anchorRow)+1;}anchorRow+=remainingY/rowPx(Math.floor(anchorRow)+1); ws.addImage(imageId,{tl:{col:anchorCol,row:anchorRow},ext:{width:drawW,height:drawH},editAs:"oneCell"});
  }
  const buf=await wb.xlsx.writeBuffer();
  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
