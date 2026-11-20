@@ -1,6 +1,6 @@
 (() => {
 const cfg=window.INFORMES_CONFIG||{},ready=!!(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_URL.includes("TU-PROYECTO")&&!cfg.SUPABASE_URL.includes("PEGA_AQUI"));
-const $=s=>document.querySelector(s),state={db:null,user:null,profile:null,reports:[],technicians:[],current:null,photos:[],materialsCatalog:[],ticketMaterials:[],draftMaterials:[],materialsHistory:[]};
+const $=s=>document.querySelector(s),state={db:null,user:null,profile:null,reports:[],technicians:[],current:null,photos:[],materialsCatalog:[],ticketMaterials:[],draftMaterials:[],materialsHistory:[],materialsMatrixReports:[]};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const labels={ticket:"Ticket",client:"Cliente",service:"Servicio / enlace",reported_by:"Reportado por",cause:"Causa",description:"Descripción inicial",solution:"Trabajo realizado",personnel:"Personal",materials:"Materiales",repair_time:"Tiempo declarado por técnico",notes:"Observaciones técnicas"};
 const statusNames={assigned:"Asignado",in_progress:"En atención",pending_review:"Pendiente de revisión",closed:"Cerrado"};
@@ -21,10 +21,69 @@ $("#logoutBtn").addEventListener("click",async()=>{await state.db.auth.signOut()
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
 async function loadTechnicians(){const {data,error}=await state.db.from("profiles").select("id,full_name,username,role,active").eq("active",true).order("full_name");if(error){console.warn(error);return}state.technicians=(data||[]).filter(p=>p.role==="technician");$("#assignTech").innerHTML='<option value="">Seleccionar técnico…</option>'+state.technicians.map(t=>'<option value="'+t.id+'">'+esc(t.full_name)+'</option>').join("");$("#usersList").innerHTML='<div class="subpanel"><h3>Personal activo</h3>'+((data||[]).map(p=>'<p>'+esc(p.full_name)+' · '+(p.role==="supervisor"?"Supervisor":"Técnico")+' · '+esc(p.username)+'</p>').join("")||"Sin usuarios")+'</div>'}
 async function loadReports(){let q=state.db.from("reports").select("*,report_photos(*)").order("created_at",{ascending:false}).limit(500);const {data,error}=await q;if(error){console.error(error);$("#reportsList").textContent="No se pudieron cargar los tickets: "+error.message;return}state.reports=data||[];renderList();renderDashboard()}
-async function loadMaterialsHistory(){const root=$("#materialsHistoryRows");if(root)root.innerHTML='<tr><td colspan="6" class="muted">Cargando materiales…</td></tr>';const {data,error}=await state.db.from("ticket_materials").select("*").order("created_at",{ascending:false}).limit(5000);if(error){console.error("No se pudo cargar el historial de materiales",error);state.materialsHistory=[];if(root)root.innerHTML='<tr><td colspan="6" class="muted">No se pudo cargar el historial: '+esc(error.message)+'</td></tr>';return}state.materialsHistory=data||[];renderMaterialsHistory()}
-function renderMaterialsHistory(){const rowsRoot=$("#materialsHistoryRows"),totalsRoot=$("#materialsTotalsRows");if(!rowsRoot||!totalsRoot)return;const term=$("#materialsSearch").value.trim().toLowerCase(),from=$("#materialsFrom").value,to=$("#materialsTo").value;const rows=(state.materialsHistory||[]).filter(m=>{const d=new Date(m.created_at);if(from&&d<new Date(from+"T00:00:00"))return false;if(to&&d>new Date(to+"T23:59:59"))return false;const r=state.reports.find(x=>x.id===m.report_id),tech=state.technicians.find(x=>x.id===m.recorded_by)?.full_name||"—";return !term||[m.material_name,m.material_code,m.description,r?.ticket,r?.client,tech].some(v=>String(v||"").toLowerCase().includes(term))});const grouped=new Map();rows.forEach(m=>{const key=[m.material_id,m.material_name,m.unit].join("|");const g=grouped.get(key)||{name:m.material_name,unit:m.unit,quantity:0,count:0};g.quantity+=Number(m.quantity)||0;g.count++;grouped.set(key,g)});const totals=[...grouped.values()].sort((a,b)=>a.name.localeCompare(b.name,"es"));$("#materialsRecordCount").textContent=rows.length+" registros";$("#materialsUniqueCount").textContent=totals.length+" materiales";$("#materialsQuantityCount").textContent=totals.reduce((s,x)=>s+x.quantity,0).toLocaleString("es-PE",{maximumFractionDigits:2})+" unidades";totalsRoot.innerHTML=totals.length?totals.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.quantity.toLocaleString("es-PE",{maximumFractionDigits:2}))+'</td><td>'+esc(x.unit||"—")+'</td><td>'+x.count+'</td></tr>').join(""):'<tr><td colspan="4" class="muted">No hay materiales registrados para estos filtros.</td></tr>';rowsRoot.innerHTML=rows.length?rows.map(m=>{const r=state.reports.find(x=>x.id===m.report_id),tech=state.technicians.find(x=>x.id===m.recorded_by)?.full_name||"—";return '<tr><td>'+fmtDate(m.created_at)+'</td><td>'+esc(r?.ticket||"Ticket no visible")+'</td><td>'+esc(tech)+'</td><td>'+esc(m.material_name)+'</td><td>'+esc(m.quantity)+' '+esc(m.unit||"")+'</td><td>'+esc(m.description||"—")+'</td></tr>'}).join(""):'<tr><td colspan="6" class="muted">No hay movimientos de materiales registrados.</td></tr>'}
-$("#materialsRefresh").onclick=async()=>{await loadReports();await loadTechnicians();await loadMaterialsHistory()};
-["materialsSearch","materialsFrom","materialsTo"].forEach(id=>$("#"+id).addEventListener(id==="materialsSearch"?"input":"change",renderMaterialsHistory));
+async function fetchAllMaterialMatrixData(){
+ const all=[];let from=0;const pageSize=1000;
+ while(true){const {data,error}=await state.db.from("ticket_materials").select("*").order("created_at",{ascending:false}).range(from,from+pageSize-1);if(error)throw error;all.push(...(data||[]));if(!data||data.length<pageSize)break;from+=pageSize;}
+ const ids=[...new Set(all.map(x=>x.report_id).filter(Boolean))],reports=[];
+ for(let i=0;i<ids.length;i+=200){const {data,error}=await state.db.from("reports").select("id,ticket,service,supervisor_started_at,started_at,created_at").in("id",ids.slice(i,i+200));if(error)throw error;reports.push(...(data||[]));}
+ return {materials:all,reports};
+}
+async function loadMaterialsHistory(){
+ const root=$("#materialsHistoryRows");if(root)root.innerHTML='<p class="muted">Cargando consumo de materiales…</p>';
+ try{const data=await fetchAllMaterialMatrixData();state.materialsHistory=data.materials;state.materialsMatrixReports=data.reports;renderMaterialsHistory()}
+ catch(error){console.error("No se pudo cargar el historial de materiales",error);state.materialsHistory=[];state.materialsMatrixReports=[];if(root)root.innerHTML='<p class="muted">No se pudo cargar el historial: '+esc(error.message)+'</p>'}
+}
+const MATERIAL_MATRIX_HEADERS=["MUFA","PREFORMADO","CINTILLO","CABLE DROP MTS","CABLE F.O. 12 HILOS","CABLE F.O. 24 HILOS","CABLE F.O. 48 HILOS","PATCHCORD","SFP"];
+function classifyMaterialColumn(m){
+ const text=String([m.material_name,m.description,m.material_code].filter(Boolean).join(" ")).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+ if(/MUFA/.test(text))return "MUFA";
+ if(/PREFORMAD/.test(text))return "PREFORMADO";
+ if(/CINTILLO/.test(text))return "CINTILLO";
+ if(/PATCH\s*CORD|PATCHCORD/.test(text))return "PATCHCORD";
+ if(/\bSFP\b|TRANSCEIVER/.test(text))return "SFP";
+ if(/DROP/.test(text))return "CABLE DROP MTS";
+ if(/CABLE/.test(text)&&/(12|DOCE)\s*(HILO|FIBRA)|FO\s*12/.test(text))return "CABLE F.O. 12 HILOS";
+ if(/CABLE/.test(text)&&/(24|VEINTICUATRO)\s*(HILO|FIBRA)|FO\s*24/.test(text))return "CABLE F.O. 24 HILOS";
+ if(/CABLE/.test(text)&&/(48|CUARENTA Y OCHO)\s*(HILO|FIBRA)|FO\s*48/.test(text))return "CABLE F.O. 48 HILOS";
+ if(/CABLE/.test(text)&&/(F\.?O\.?|FIBRA OPTICA)/.test(text))return "CABLE F.O. (SIN ESPECIFICAR)";
+ return String(m.material_name||"OTRO MATERIAL").trim().toUpperCase();
+}
+function buildMaterialsMatrix(){
+ const reports=state.materialsMatrixReports||[],reportMap=new Map(reports.map(r=>[r.id,r])),groups=new Map(),extra=new Set();
+ (state.materialsHistory||[]).forEach(m=>{const r=reportMap.get(m.report_id);if(!r)return;let row=groups.get(m.report_id);if(!row){row={report:r,values:new Map()};groups.set(m.report_id,row)}const col=classifyMaterialColumn(m);if(!MATERIAL_MATRIX_HEADERS.includes(col))extra.add(col);const list=row.values.get(col)||[];const value=String(m.quantity??"").trim();if(value)list.push(value);row.values.set(col,list)});
+ const headers=[...MATERIAL_MATRIX_HEADERS,...[...extra].sort((a,b)=>a.localeCompare(b,"es"))];
+ const rows=[...groups.values()].map(g=>{const d=new Date(g.report.supervisor_started_at||g.report.started_at||g.report.created_at);return {ticket:g.report.ticket||"NA",date:Number.isNaN(+d)?"":d.toLocaleDateString("es-PE"),service:g.report.service||"",values:headers.map(h=>(g.values.get(h)||[]).join("; ")),sort:Number.isNaN(+d)?0:+d}}).sort((a,b)=>b.sort-a.sort);
+ return {headers,rows};
+}
+function renderMaterialsHistory(){
+ const root=$("#materialsHistoryRows");if(!root)return;
+ const {headers,rows}=buildMaterialsMatrix();
+ $("#materialsRecordCount").textContent=rows.length+" averías con consumo";
+ $("#materialsUniqueCount").textContent=headers.length+" tipos de material";
+ $("#materialsQuantityCount").textContent=(state.materialsHistory||[]).length+" registros de consumo";
+ const cols=["INCIDENCIA / TICKET","FECHA","ENLACE",...headers];
+ root.innerHTML='<table class="material-matrix"><thead><tr>'+cols.map(h=>'<th>'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+
+ (rows.length?rows.map(r=>'<tr><td>'+esc(r.ticket)+'</td><td>'+esc(r.date)+'</td><td>'+esc(r.service)+'</td>'+r.values.map(v=>'<td>'+esc(v)+'</td>').join("")+'</tr>').join(""):'<tr><td colspan="'+cols.length+'" class="muted">Todavía no hay averías con materiales registrados.</td></tr>')+
+ '</tbody></table>';
+}
+async function downloadMaterialsMatrixExcel(){
+ const btn=$("#materialsDownload");if(btn){btn.disabled=true;btn.textContent="Preparando Excel…"}
+ try{
+  if(!window.ExcelJS)throw new Error("No cargó ExcelJS. Revisa la conexión a internet.");
+  const data=await fetchAllMaterialMatrixData();state.materialsHistory=data.materials;state.materialsMatrixReports=data.reports;
+  const {headers,rows}=buildMaterialsMatrix(),wb=new ExcelJS.Workbook(),ws=wb.addWorksheet("Consumo de materiales");
+  ws.mergeCells(1,1,1,3+headers.length);ws.getCell(1,1).value="MOVILMAX — CONTROL DE MATERIALES UTILIZADOS";ws.getCell(1,1).font={name:"Arial",size:14,bold:true,color:{argb:"FFFFFFFF"}};ws.getCell(1,1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF10243A"}};ws.getCell(1,1).alignment={horizontal:"center",vertical:"middle"};ws.getRow(1).height=28;
+  ws.mergeCells(2,1,2,3+headers.length);ws.getCell(2,1).value="Registro por incidencia · Cantidades individuales, sin acumulación · Generado: "+new Date().toLocaleString("es-PE");ws.getCell(2,1).font={italic:true,color:{argb:"FF526477"},size:9};ws.getCell(2,1).alignment={horizontal:"left"};
+  const head=["INCIDENCIA / TICKET","FECHA","ENLACE",...headers];ws.addRow(head);
+  const headerRow=ws.getRow(3);headerRow.height=36;headerRow.eachCell(c=>{c.font={bold:true,color:{argb:"FFFFFFFF"},size:9};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF244B68"}};c.alignment={horizontal:"center",vertical:"middle",wrapText:true};c.border={top:{style:"thin",color:{argb:"FF9AAAB8"}},bottom:{style:"thin",color:{argb:"FF9AAAB8"}},left:{style:"thin",color:{argb:"FFCBD5DF"}},right:{style:"thin",color:{argb:"FFCBD5DF"}}}});
+  rows.forEach((r,i)=>{const row=ws.addRow([r.ticket,r.date,r.service,...r.values]);row.height=22;row.eachCell(c=>{c.font={name:"Arial",size:9,color:{argb:"FF172536"}};c.alignment={vertical:"middle",horizontal:"center",wrapText:true};c.border={top:{style:"hair",color:{argb:"FFD7E0E8"}},bottom:{style:"hair",color:{argb:"FFD7E0E8"}},left:{style:"hair",color:{argb:"FFD7E0E8"}},right:{style:"hair",color:{argb:"FFD7E0E8"}}};if(i%2===1)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF3F6F8"}}});});
+  ws.columns=[{width:20},{width:14},{width:38},...headers.map(()=>({width:18}))];ws.views=[{state:"frozen",ySplit:3,xSplit:3}];ws.autoFilter={from:{row:3,column:1},to:{row:3+rows.length,column:head.length}};ws.pageSetup={paperSize:ws.PAPER_SIZE_A4,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};ws.pageSetup.margins={left:.25,right:.25,top:.5,bottom:.5,header:.2,footer:.2};
+  const blob=await wb.xlsx.writeBuffer(),url=URL.createObjectURL(new Blob([blob],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})),a=document.createElement("a");a.href=url;a.download="Control-Materiales-MOVILMAX-"+new Date().toISOString().slice(0,10)+".xlsx";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);renderMaterialsHistory();
+ }catch(error){console.error(error);alert("No se pudo generar el Excel de materiales: "+error.message)}
+ finally{if(btn){btn.disabled=false;btn.textContent="Descargar Excel de materiales"}}
+}
+$("#materialsRefresh").onclick=async()=>{await loadMaterialsHistory()};
+$("#materialsDownload").onclick=downloadMaterialsMatrixExcel;
 function filteredReports(from,to){return state.reports.filter(r=>{const d=new Date(r.supervisor_started_at||r.started_at||r.created_at||Date.now());if(from&&d<new Date(from+"T00:00:00"))return false;if(to&&d>new Date(to+"T23:59:59"))return false;return true})}
 function renderList(){const root=$("#reportsList");if(!root)return;const term=$("#searchInput").value.trim().toLowerCase(),from=$("#dateFrom").value,to=$("#dateTo").value,status=$("#statusFilter").value;let rows=filteredReports(from,to).filter(r=>{if(status&&r.status!==status)return false;if(!term)return true;const tech=state.technicians.find(t=>t.id===r.assigned_to)?.full_name||"";return [r.ticket,r.client,r.service,r.description,r.cause,r.solution,tech].some(x=>String(x||"").toLowerCase().includes(term))});if(!rows.length){root.innerHTML='<div class="empty">No se encontraron tickets con esos filtros.</div>';return}root.innerHTML=rows.map(r=>{const tech=state.technicians.find(t=>t.id===r.assigned_to)?.full_name||"Sin asignar";return '<article class="report-row"><div><strong>'+esc(r.ticket)+' · '+esc(r.client||"Sin cliente")+'</strong><small>'+esc(r.service||"")+' · Técnico: '+esc(tech)+' · Inicio: '+fmtDate(r.supervisor_started_at||r.started_at)+'</small><small><span class="state-pill '+(statusClass[r.status]||"")+'">'+esc(statusNames[r.status]||"Sin estado")+'</span> &nbsp; Actualizado: '+fmtDate(r.updated_at||r.created_at)+'</small></div><div class="report-actions"><button class="secondary" data-open="'+r.id+'">Abrir ticket</button>'+(r.pdf_storage_path?'<button class="secondary" data-pdf="'+r.id+'">PDF final</button>':"")+(r.xlsx_storage_path?'<button class="secondary" data-xlsx="'+r.id+'">Excel final</button>':"")+'</div></article>'}).join("");root.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDetail(b.dataset.open));root.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>downloadPdf(b.dataset.pdf));root.querySelectorAll("[data-xlsx]").forEach(b=>b.onclick=()=>downloadExcel(b.dataset.xlsx));}
 $("#searchInput").addEventListener("input",renderList);["dateFrom","dateTo","statusFilter"].forEach(id=>$("#"+id).addEventListener("change",renderList));$("#clearFilters").onclick=()=>{$("#searchInput").value="";$("#dateFrom").value="";$("#dateTo").value="";$("#statusFilter").value="";renderList()};$("#refreshBtn").onclick=async()=>{await loadReports();await loadTechnicians()};$("#dashRefresh").onclick=async()=>{await loadReports()};$("#dashApply").onclick=renderDashboard;
