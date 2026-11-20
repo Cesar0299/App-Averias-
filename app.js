@@ -100,6 +100,8 @@ async function createAndStoreExcel(r){
  try{ws.unMergeCells("G91:K91");}catch(e){}
  try{ws.mergeCells("H91:K91");}catch(e){}
  const photoW=302,photoH=416; // 8 cm x 11 cm a 96 dpi
+ const photoBands=[[14,31],[33,49],[51,69],[71,90]];
+ for(const [first,last] of photoBands){const each=312/(last-first+1);for(let row=first;row<=last;row++)ws.getRow(row).height=each;}
  for(let i=0;i<slots.length;i++){
    const s=slots[i],p=sorted[i];
    setValue(s.num,p?String(i+1):"");
