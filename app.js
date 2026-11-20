@@ -50,8 +50,99 @@ function materialsPdfTable(rows){if(!rows?.length)return '<p>Sin materiales regi
 function renderMaterialsEditor(){const select=$("#materialSelect");if(!select)return;select.innerHTML='<option value="">Selecciona un material…</option>'+state.materialsCatalog.map(m=>'<option value="'+m.id+'" data-unit="'+esc(m.unit)+'">'+esc(m.code+" · "+m.name)+'</option>').join("");$("#materialUnit").value="";select.onchange=()=>{const m=state.materialsCatalog.find(x=>String(x.id)===select.value);if(m)$("#materialUnit").value=m.unit||"unidad"};$("#addMaterialBtn").onclick=()=>{const m=state.materialsCatalog.find(x=>String(x.id)===select.value),description=$("#materialDescription").value.trim(),quantity=Number($("#materialQuantity").value),unit=$("#materialUnit").value.trim();if(!m){alert("Selecciona un material del catálogo.");return}if(!description){alert("Escribe la descripción del material utilizado.");return}if(!Number.isFinite(quantity)||quantity<=0){alert("Ingresa una cantidad mayor que cero.");return}if(!unit){alert("Indica la unidad de medida.");return}state.draftMaterials.push({material_id:m.id,material_code:m.code,material_name:m.name,description,quantity,unit});$("#materialDescription").value="";$("#materialQuantity").value="";select.value="";$("#materialUnit").value="";renderDraftMaterials();syncMaterialsSummary()};renderDraftMaterials();syncMaterialsSummary()}
 function renderDraftMaterials(){const root=$("#materialRows");if(!root)return;if(!state.draftMaterials.length){root.innerHTML='<tr><td colspan="6" class="muted">Aún no agregas materiales.</td></tr>';return}root.innerHTML=state.draftMaterials.map((x,i)=>'<tr><td>'+esc(x.material_code)+'</td><td>'+esc(x.material_name)+'</td><td>'+(isBoss()?'<input class="material-inline-edit" data-edit-material="'+i+'" data-field="description" value="'+esc(x.description||"")+'" aria-label="Descripción">':esc(x.description||"—"))+'</td><td>'+(isBoss()?'<input class="material-inline-edit" data-edit-material="'+i+'" data-field="quantity" type="number" min="0.01" step="0.01" value="'+esc(x.quantity)+'" aria-label="Cantidad">':esc(x.quantity))+'</td><td>'+(isBoss()?'<input class="material-inline-edit" data-edit-material="'+i+'" data-field="unit" value="'+esc(x.unit)+'" aria-label="Unidad">':esc(x.unit))+'</td><td><button class="danger material-remove" type="button" data-remove-material="'+i+'" aria-label="Eliminar material">Eliminar</button></td></tr>').join("");root.querySelectorAll("[data-edit-material]").forEach(input=>input.onchange=()=>{const item=state.draftMaterials[Number(input.dataset.editMaterial)],field=input.dataset.field;item[field]=field==="quantity"?Number(input.value):input.value.trim();syncMaterialsSummary()});root.querySelectorAll("[data-remove-material]").forEach(b=>b.onclick=async()=>{const i=Number(b.dataset.removeMaterial),item=state.draftMaterials[i];if(item?.id&&!isBoss()){const {error}=await state.db.from("ticket_materials").delete().eq("id",item.id);if(error){alert("No se pudo eliminar: "+error.message);return}state.ticketMaterials=state.ticketMaterials.filter(x=>x.id!==item.id)}state.draftMaterials.splice(i,1);renderDraftMaterials();syncMaterialsSummary()})}
 async function persistTicketMaterials(reportId){const draft=state.draftMaterials||[],existing=state.ticketMaterials||[];if(isBoss()){const keepIds=draft.filter(x=>x.id).map(x=>x.id),removed=existing.filter(x=>!keepIds.includes(x.id));if(removed.length){const {error}=await state.db.from("ticket_materials").delete().in("id",removed.map(x=>x.id));if(error)throw error}for(const x of draft.filter(x=>x.id)){const {error}=await state.db.from("ticket_materials").update({description:x.description||null,quantity:x.quantity,unit:x.unit}).eq("id",x.id);if(error)throw error}}const newRows=draft.filter(x=>!x.id);if(newRows.length){const payload=newRows.map(x=>({report_id:reportId,material_id:x.material_id,material_code:x.material_code,material_name:x.material_name,description:x.description||null,quantity:x.quantity,unit:x.unit,recorded_by:state.user.id}));const {data,error}=await state.db.from("ticket_materials").insert(payload).select("*");if(error)throw error;state.ticketMaterials=[...state.ticketMaterials,...(data||[])]}await loadTicketMaterials(reportId);syncMaterialsSummary()}
-async function createAndStoreExcel(r){if(!window.ExcelJS)throw new Error("No cargó ExcelJS. Revisa la conexión a internet.");const materials=state.ticketMaterials||[];const wb=new ExcelJS.Workbook();wb.creator="INFORMES MAX";wb.created=new Date();const ws=wb.addWorksheet("Table 1");ws.views=[{showGridLines:false}];ws.pageSetup={paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:"B2:K99",margins:{left:.25,right:.25,top:.35,bottom:.35,header:.1,footer:.1}};ws.columns=[{width:2},{width:12},{width:25},{width:15},{width:18},{width:4},{width:8},{width:13},{width:24},{width:12},{width:25}];const navy="FF17365D",blue="FFD9EAF7",pale="FFEEF3F7",white="FFFFFFFF",line="FF8798A8";const border={top:{style:"thin",color:{argb:line}},left:{style:"thin",color:{argb:line}},bottom:{style:"thin",color:{argb:line}},right:{style:"thin",color:{argb:line}}};const set=(range,value,opts={})=>{ws.mergeCells(range);const cell=ws.getCell(range.split(":")[0]);cell.value=value;cell.alignment={vertical:"middle",wrapText:true,...(opts.alignment||{})};cell.font={name:"Arial",size:10,...(opts.font||{})};cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:opts.fill||"FFFFFFFF"}};cell.border=border;return cell};set("B2:I4","REPORTE DE AVERÍA - COGENT - ENLACE: MMX - TELXIUS",{font:{bold:true,size:16,color:{argb:white}},fill:navy,alignment:{horizontal:"center",vertical:"middle",wrapText:true}});set("J2:K2","TICKET: "+(r.ticket||""),{font:{bold:true,color:{argb:white}},fill:navy});set("J3:K3","FECHA: "+new Date().toLocaleDateString("es-PE"),{font:{bold:true,color:{argb:white}},fill:navy});for(let rr=2;rr<=4;rr++)ws.getRow(rr).height=22;const fields=[["B8:C8","Fecha y hora de inicio","D8:E8",fmtDate(r.supervisor_started_at||r.started_at),"H8:I8","Fecha y hora de solución","J8:K8",fmtDate(r.supervisor_ended_at||r.resolved_at)],["B9:C9","Elaborado por","D9:E9",r.reported_by||state.profile?.full_name||"","H9:I9","Resuelto por","J9:K9",r.resolved_by||state.technicians.find(t=>t.id===r.assigned_to)?.full_name||""],["B10:C10","Nombre del cliente","D10:E10",r.client||"","H10:I10","Fecha de solución","J10:K10",fmtDate(r.supervisor_ended_at||r.resolved_at)],["B11:C11","Tipo de servicio","D11:E11",r.service||"","H11:I12","Causa","J11:K12",r.cause||""],["B12:C12","Servicio afectado","D12:E12",r.service||"","","","",""]];for(const f of fields){if(f[1])set(f[0],f[1],{font:{bold:true,color:{argb:navy}},fill:blue});if(f[2])set(f[2],f[3],{fill:"FFFFFF"});if(f[4]&&f[5])set(f[4],f[5],{font:{bold:true,color:{argb:navy}},fill:blue});if(f[6])set(f[6],f[7],{fill:"FFFFFF"})}set("B13:K13","EVIDENCIAS FOTOGRÁFICAS",{font:{bold:true,color:{argb:white},size:11},fill:navy,alignment:{horizontal:"center"}});ws.getRow(13).height=20;const photoSlots=[{tl:{col:1,row:14},br:{col:6,row:32},num:"B32",desc:"C32:F32",capRow:32},{tl:{col:7,row:14},br:{col:12,row:32},num:"G32",desc:"H32:K32",capRow:32},{tl:{col:1,row:33},br:{col:6,row:51},num:"B51",desc:"C51:F51",capRow:51},{tl:{col:7,row:33},br:{col:12,row:51},num:"G51",desc:"H51:K51",capRow:51},{tl:{col:1,row:52},br:{col:6,row:70},num:"B70",desc:"C70:F70",capRow:70},{tl:{col:7,row:52},br:{col:12,row:70},num:"G70",desc:"H70:K70",capRow:70},{tl:{col:1,row:71},br:{col:6,row:89},num:"B89",desc:"C89:F89",capRow:89},{tl:{col:7,row:71},br:{col:12,row:89},num:"G89",desc:"H89:K89",capRow:89}];for(const s of photoSlots){ws.getRow(s.capRow).height=28;for(let rr=s.capRow-18;rr<s.capRow;rr++)ws.getRow(rr).height=20;set(s.num,String(photoSlots.indexOf(s)+1),{font:{bold:true,size:10,color:{argb:navy}},fill:blue,alignment:{horizontal:"center",vertical:"middle"}});set(s.desc,(p=>{if(!p)return "Sin descripción";const d=p.created_at?new Date(p.created_at).toLocaleDateString("es-PE",{day:"2-digit",month:"2-digit",year:"2-digit"}):"Fecha no registrada";return d+" - "+(p.description||"Sin descripción")})((r.report_photos||[]).sort((a,b)=>a.position-b.position)[photoSlots.indexOf(s)]),{font:{size:9,color:{argb:"FF263746"}},fill:pale,alignment:{horizontal:"left",vertical:"middle",wrapText:true}})}for(let i=0;i<Math.min(photoSlots.length,(r.report_photos||[]).length);i++){const p=(r.report_photos||[]).sort((a,b)=>a.position-b.position)[i];const {data,error}=await state.db.storage.from("report-photos").download(p.storage_path);if(error||!data)continue;const bytes=new Uint8Array(await data.arrayBuffer());let binary="";for(let j=0;j<bytes.length;j+=0x8000)binary+=String.fromCharCode(...bytes.subarray(j,j+0x8000));const imageId=wb.addImage({base64:"data:image/jpeg;base64,"+btoa(binary),extension:"jpeg"});const slot=photoSlots[i];ws.addImage(imageId,{tl:slot.tl,br:slot.br,editAs:"oneCell"})}set("B92:G92","PERSONAL QUE ATENDIÓ LA AVERÍA",{font:{bold:true,color:{argb:white}},fill:navy,alignment:{horizontal:"center"}});set("H92:K92","MATERIALES USADOS EN AVERÍA",{font:{bold:true,color:{argb:white}},fill:navy,alignment:{horizontal:"center"}});const people=String(r.personnel||"").split(/[,\n;]/).map(x=>x.trim()).filter(Boolean);for(let i=0;i<5;i++){set("B"+(93+i)+":G"+(93+i),people[i]||"",{});const m=materials[i];set("H"+(93+i)+":K"+(93+i),m?[m.material_name+" — "+(m.description||"")+" — "+m.quantity+" "+m.unit]:"",{})}set("B98:K98","TIEMPO DE REPARACIÓN DESDE EL INICIO: "+fmtMins(duration(r.supervisor_started_at||r.started_at,r.supervisor_ended_at||r.resolved_at)),{font:{bold:true,color:{argb:navy}},fill:blue});set("B99:K99","NOTA: "+(r.notes||"Sin observaciones"),{font:{italic:true},fill:pale});for(let rr=8;rr<=12;rr++)ws.getRow(rr).height=24;ws.getRow(98).height=24;ws.getRow(99).height=30;const buf=await wb.xlsx.writeBuffer();const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});const path=r.id+"/informe-final.xlsx";const {error}=await state.db.storage.from("report-excels").upload(path,blob,{contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",upsert:true});if(error)throw error;return path}
-
+async function createAndStoreExcel(r){
+ if(!window.ExcelJS)throw new Error("No cargó ExcelJS. Revisa la conexión a internet.");
+ const materials=state.ticketMaterials||[];
+ const response=await fetch("./Plantilla_Averias_MOVILMAX_8_fotos.xlsx",{cache:"no-store"});
+ if(!response.ok)throw new Error("No se pudo cargar la plantilla original de averías ("+response.status+").");
+ const templateBuffer=await response.arrayBuffer();
+ const wb=new ExcelJS.Workbook();
+ await wb.xlsx.load(templateBuffer);
+ const ws=wb.getWorksheet("Table 1")||wb.worksheets[0];
+ if(!ws)throw new Error("La plantilla no contiene la hoja de trabajo esperada.");
+ const setValue=(address,value,opts={})=>{
+   const c=ws.getCell(address);c.value=value??"";
+   c.alignment={...(c.alignment||{}),vertical:"middle",wrapText:true,...(opts.alignment||{})};
+   if(opts.bold!==undefined)c.font={...(c.font||{}),bold:opts.bold};
+ };
+ setValue("J2","TICKET: "+(r.ticket||""));
+ setValue("J3","FECHA: "+new Date().toLocaleDateString("es-PE"));
+ setValue("D8",fmtDate(r.supervisor_started_at||r.started_at));
+ setValue("J8",fmtDate(r.supervisor_ended_at||r.resolved_at));
+ setValue("D9",r.reported_by||state.profile?.full_name||"");
+ setValue("J9",r.resolved_by||state.technicians.find(t=>t.id===r.assigned_to)?.full_name||"");
+ setValue("D10",r.client||"");
+ setValue("J10",fmtDate(r.supervisor_ended_at||r.resolved_at));
+ setValue("D11",r.service||"");
+ setValue("J11",r.cause||"");
+ setValue("D12",r.service||"");
+ const people=String(r.personnel||"").split(/[,\\n;]/).map(x=>x.trim()).filter(Boolean);
+ for(let i=0;i<5;i++){
+   setValue("B"+(93+i),people[i]||"");
+   const m=materials[i];
+   setValue("H"+(93+i),m?[m.material_name,m.description,m.quantity+" "+(m.unit||"")].filter(Boolean).join(" — "):"");
+ }
+ setValue("B98","TIEMPO DE REPARACIÓN DESDE EL INICIO: "+fmtMins(duration(r.supervisor_started_at||r.started_at,r.supervisor_ended_at||r.resolved_at)));
+ setValue("B99","NOTA: "+(r.notes||"Sin observaciones"));
+ const sorted=(r.report_photos||[]).slice().sort((a,b)=>(a.position||0)-(b.position||0)).slice(0,8);
+ const slots=[
+  {area:{col:1,row:13},rows:[14,31],num:"B32",desc:"C32",descMerge:"C32:G32"},
+  {area:{col:7,row:13},rows:[14,31],num:"H32",desc:"I32",descMerge:"I32:K32"},
+  {area:{col:1,row:32},rows:[33,49],num:"B50",desc:"C50",descMerge:"C50:G50"},
+  {area:{col:7,row:32},rows:[33,49],num:"H50",desc:"I50",descMerge:"I50:K50"},
+  {area:{col:1,row:50},rows:[51,69],num:"B70",desc:"C70",descMerge:"C70:G70"},
+  {area:{col:7,row:50},rows:[51,69],num:"H70",desc:"I70",descMerge:"I70:K70"},
+  {area:{col:1,row:70},rows:[71,90],num:"B91",desc:"C91",descMerge:"C91:F91"},
+  {area:{col:6,row:70},rows:[71,90],num:"G91",desc:"H91",descMerge:"H91:K91"}
+ ];
+ // En el último pie de foto, la plantilla original tenía un único cuadro fusionado;
+ // se divide en número y descripción para mantener el mismo patrón de las ocho evidencias.
+ try{ws.unMergeCells("G91:K91");}catch(e){}
+ try{ws.mergeCells("H91:K91");}catch(e){}
+ const photoW=302,photoH=416; // 8 cm x 11 cm a 96 dpi
+ for(let i=0;i<slots.length;i++){
+   const s=slots[i],p=sorted[i];
+   setValue(s.num,p?String(i+1):"");
+   const caption=p?(p.created_at?new Date(p.created_at).toLocaleString("es-PE"):"Fecha no registrada")+" - "+(p.description||"Sin descripción"):"";
+   setValue(s.desc,caption,{alignment:{horizontal:"left",vertical:"middle",wrapText:true}});
+   if(!p)continue;
+   const {data,error}=await state.db.storage.from("report-photos").download(p.storage_path);
+   if(error||!data)throw new Error("No se pudo descargar la foto "+(i+1)+" para el Excel.");
+   let blob=data;
+   let mime=(data.type||"").toLowerCase();
+   if(!mime.includes("png")&&!mime.includes("jpeg")&&!mime.includes("jpg")){
+     if(!window.createImageBitmap)throw new Error("La foto "+(i+1)+" tiene un formato no compatible. Usa JPG o PNG.");
+     const bitmap=await createImageBitmap(data);
+     const canvas=document.createElement("canvas");canvas.width=photoW;canvas.height=photoH;
+     const ctx=canvas.getContext("2d");ctx.fillStyle="#FFFFFF";ctx.fillRect(0,0,photoW,photoH);
+     const scale=Math.min(photoW/bitmap.width,photoH/bitmap.height);
+     const w=bitmap.width*scale,h=bitmap.height*scale;
+     ctx.drawImage(bitmap,(photoW-w)/2,(photoH-h)/2,w,h);bitmap.close?.();
+     blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.92));mime="image/jpeg";
+   }else{
+     const bitmap=await createImageBitmap(data);
+     const canvas=document.createElement("canvas");canvas.width=photoW;canvas.height=photoH;
+     const ctx=canvas.getContext("2d");ctx.fillStyle="#FFFFFF";ctx.fillRect(0,0,photoW,photoH);
+     const scale=Math.min(photoW/bitmap.width,photoH/bitmap.height);
+     const w=bitmap.width*scale,h=bitmap.height*scale;
+     ctx.drawImage(bitmap,(photoW-w)/2,(photoH-h)/2,w,h);bitmap.close?.();
+     blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.92));mime="image/jpeg";
+   }
+   if(!blob)throw new Error("No se pudo preparar la foto "+(i+1)+".");
+   const bytes=new Uint8Array(await blob.arrayBuffer());let binary="";
+   for(let j=0;j<bytes.length;j+=0x8000)binary+=String.fromCharCode(...bytes.subarray(j,j+0x8000));
+   const imageId=wb.addImage({base64:"data:image/jpeg;base64,"+btoa(binary),extension:"jpeg"});
+   // El área de cada evidencia conserva su marco de la plantilla; la imagen queda
+   // en proporción 8 x 11 cm, sin deformar la fotografía original.
+   ws.addImage(imageId,{tl:{col:s.area.col,row:s.area.row},ext:{width:photoW,height:photoH},editAs:"oneCell"});
+ }
+ const buf=await wb.xlsx.writeBuffer();
+ const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+ const path=r.id+"/informe-final.xlsx";
+ const {error}=await state.db.storage.from("report-excels").upload(path,blob,{contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",upsert:true});
+ if(error)throw error;
+ return path;
+}
 
 async function createAndStoreMaterialsExcel(r){
  if(!window.ExcelJS)throw new Error("No cargó ExcelJS.");
